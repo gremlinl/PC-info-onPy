@@ -235,11 +235,12 @@ def run_hw(cmd, shell=False, encoding=None):
 
 def get_cpu_info():
     model = platform.processor() or "Неизвестно"
-    cores = os.cpu_count()
-    threads = os.cpu_count()
+    cores = None
+    threads = None
     serial = "N/A"
-    
+
     if platform.system() == "Windows":
+        # Получаем полное имя из wmic
         out = run_hw("wmic cpu get Name /value", shell=True)
         if out:
             for line in out.splitlines():
@@ -247,13 +248,35 @@ def get_cpu_info():
                     full_name = line.split("=", 1)[1].strip()
                     if full_name and full_name != "N/A":
                         model = full_name
-        
+
+        # Серийный номер (ProcessorId)
         out = run_hw("wmic cpu get ProcessorId /value", shell=True)
         if out:
             for line in out.splitlines():
                 if "ProcessorId" in line:
                     serial = line.split("=")[1].strip()
-        
+
+        # Количество физических ядер
+        out = run_hw("wmic cpu get NumberOfCores /value", shell=True)
+        if out:
+            for line in out.splitlines():
+                if "NumberOfCores=" in line:
+                    try:
+                        cores = int(line.split("=")[1].strip())
+                    except:
+                        pass
+
+        # Количество логических процессоров (потоков)
+        out = run_hw("wmic cpu get NumberOfLogicalProcessors /value", shell=True)
+        if out:
+            for line in out.splitlines():
+                if "NumberOfLogicalProcessors=" in line:
+                    try:
+                        threads = int(line.split("=")[1].strip())
+                    except:
+                        pass
+
+        # Частоты
         out = run_hw("wmic cpu get CurrentClockSpeed /value", shell=True)
         current_speed = "N/A"
         if out:
@@ -262,7 +285,7 @@ def get_cpu_info():
                     speed_mhz = line.split("=")[1].strip()
                     if speed_mhz and speed_mhz.isdigit():
                         current_speed = f"{int(speed_mhz) / 1000:.2f} GHz"
-        
+
         out = run_hw("wmic cpu get MaxClockSpeed /value", shell=True)
         max_speed = "N/A"
         if out:
@@ -271,16 +294,29 @@ def get_cpu_info():
                     speed_mhz = line.split("=")[1].strip()
                     if speed_mhz and speed_mhz.isdigit():
                         max_speed = f"{int(speed_mhz) / 1000:.2f} GHz"
-        
+
         if "@" not in model and max_speed != "N/A":
             model = f"{model} @ {max_speed}"
-    
+
+
+    if cores is None:
+        if threads is not None:
+            cores = None
+        else:
+            logical = os.cpu_count()
+            if logical is not None:
+                threads = logical
+                cores = None
+    if threads is None:
+        threads = os.cpu_count()
+    if cores is None:
+        cores = threads if threads is not None else "N/A"
+
     return {
-        "model": model, 
-        "cores": cores, 
-        "threads": threads, 
+        "model": model,
+        "cores": cores,
+        "threads": threads if threads is not None else "N/A",
         "serial": serial,
-        "current_speed": current_speed if 'current_speed' in locals() else "N/A",
         "max_speed": max_speed if 'max_speed' in locals() else "N/A"
     }
 
